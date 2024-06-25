@@ -39,7 +39,7 @@ def _do_setup():
           package_data={
               "isaacgym": package_files
           },
-          # python_requires='>=3.6,<3.9',
+          python_requires='>=3.6,<3.9',
           install_requires = [
               "torch>=1.8.0",
               "torchvision>=0.9.0",
