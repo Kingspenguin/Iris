@@ -33,8 +33,8 @@ import os
 from datetime import datetime
 
 import isaacgym
-from legged_gym.envs import *
-from legged_gym.utils import get_args, task_registry
+from legged_gym.legged_gym.envs import *
+from legged_gym.legged_gym.utils import get_args, task_registry
 from shutil import copyfile
 import torch
 import wandb
