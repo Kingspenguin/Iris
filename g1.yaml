@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job # Deployment will automatically restart when killed. Use Pod if not needed
+metadata:
+  labels:
+    # k8s-app: student-curves
+  generateName: jhma-g1-debug # replace <your_name> with something that identifies you
+  namespace: rl-work
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: research
+          image: rchal97/complex_loco_preview4
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c"] # replace this with your own job execution scripts
+          args:
+              - cd /workspace
+                /opt/conda/envs/rlgpu/bin/git clone git@github.com:chengxuxin/humanoid_h1.git
+                git checkout g1_janhan
+                cd humanoid_h1/legged_gym/legged_gym/scripts
+                /opt/conda/envs/rlgpu/bin/python train.py
+          resources:
+            requests:
+              memory: "16Gi" # 16 Gb memory
+              cpu: "4" # 4 CPUs
+              nvidia.com/gpu: 1 # requesting X GPU
+            limits:
+              memory: "16Gi" # 276 Gb memory
+              cpu: "4" # 8 CPUs
+              nvidia.com/gpu: 1 # requesting X GPU
+          volumeMounts:
+            - mountPath: /jhma
+              name: jhma
+            # - mountPath: /dev/shm
+            #   name: dshm
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #         - matchExpressions:
+      #             - key: nvidia.com/gpu.product
+      #               operator: NotIn
+      #               values:
+      #               - Tesla-K40c
+      #               - NVIDIA-GeForce-GTX-1070
+      #               - Tesla-T4
+      #               - NVIDIA-TITAN-Xp
+      #               - NVIDIA-GeForce-GTX-1080
+      #               - NVIDIA-GeForce-GTX-1080-Ti
+      #               - NVIDIA-GeForce-RTX-2080-Ti
+      #               - Quadro-M4000
+      #               - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
+      #               - NVIDIA-A100-80GB-PCIe-MIG-1g.10gb
+      #               - NVIDIA-A100-SXM4-80GB 
+      #             - key: kubernetes.io/hostname
+      #               operator: NotIn
+      #               # values:
+      #               #   - nautilusg02.sci.cwru.edu
+      volumes:
+        - name: jhma
+          persistentVolumeClaim:
+            claimName: jhma 
+        # - name: dshm
+        #   emptyDir:
+            medium: Memory

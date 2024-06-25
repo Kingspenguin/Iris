@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jhma-g1-debug2
+spec:
+  template:
+    spec:
+      containers:
+      - name: gpu-container
+        image: rchal97/complex_loco_preview4
+        command: ["/bin/bash", "-c", 
+          "mkdir -p g1 && cd g1 && \
+           git clone git@github.com:chengxuxin/humanoid_h1.git && \
+           cd humanoid_h1 && git checkout g1_janhan && \
+           cd legged_gym/legged_gym/scripts && \
+           /opt/conda/envs/rlgpu/bin/python train.py"]
+        volumeMounts:
+        - mountPath: /tutorial
+          name: tutorial-volume
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+            memory: "16G"
+            cpu: "4"
+          requests:
+            nvidia.com/gpu: "1"
+            memory: "16G"
+            cpu: "4"
+      restartPolicy: Never
+      volumes:
+      - name: tutorial-volume
+        persistentVolumeClaim:
+          claimName: tutorial-volume
