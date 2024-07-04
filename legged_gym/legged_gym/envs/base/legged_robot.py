@@ -27,7 +27,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
-
 from legged_gym import LEGGED_GYM_ROOT_DIR, envs
 from time import time
 from warnings import WarningMessage
@@ -45,7 +44,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import *
-from legged_gym.utils.helpers import class_to_dict
+from legged_gym.utils.helpers import class_to_dict, FloatingCameraSensor
 from scipy.spatial.transform import Rotation as R
 from .legged_robot_config import LeggedRobotCfg
 
@@ -265,6 +264,8 @@ class LeggedRobot(BaseTask):
 
         self.compute_observations() # in some cases a simulation step might be required to refresh some obs (for example body positions)
 
+        self._render_headless()
+
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_torques[:] = self.torques[:]
@@ -290,12 +291,12 @@ class LeggedRobot(BaseTask):
     def check_termination(self):
         """ Check if environments need to be reset
         """
+        self.collide_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         # roll_cutoff = torch.abs(self.roll) > 1.0
         # pitch_cutoff = torch.abs(self.pitch) > 1.0
         reach_goal_cutoff = self.cur_goal_idx >= self.cfg.terrain.num_goals
         height_cutoff = self.root_states[:, 2] < 0.5
-
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.time_out_buf |= reach_goal_cutoff
 
@@ -545,7 +546,7 @@ class LeggedRobot(BaseTask):
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         # 
-        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0)
+        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt / self.cfg.control.decimation)==0)
         self._resample_commands(env_ids.nonzero(as_tuple=False).flatten())
 
         if self.cfg.commands.heading_command:
@@ -616,14 +617,26 @@ class LeggedRobot(BaseTask):
         Args:
             env_ids (List[int]): Environemnt ids
         """
-        self.dof_pos[env_ids] = self.default_dof_pos# + torch_rand_float(0., 0.5, (len(env_ids), self.num_dof), device=self.device)
-        self.dof_pos[env_ids, :12] += torch_rand_float(-0.5, 0.5, (len(env_ids), 12), device=self.device)
+        random = torch_rand_float(-0.5, 0.5, (len(env_ids), self.cfg.env.num_actions), device=self.device)
+        random[0, 12:] = 0
+        random[0, 1] = 0
+        random[0, 3] *= 0.5
+        random[0, 5] = 0
+        random[0, 7] = 0
+        random[0, 9] *= 0.5
+        random[0, 11] = 0
+
+        self.dof_pos[env_ids] = self.default_dof_pos + random
+        # self.dof_pos[env_ids, :12] += random
+        # self.dof_pos[env_ids, :0] += 0.5
+        # print(random)
         self.dof_vel[env_ids] = 0
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+        
     def _reset_root_states(self, env_ids, root_vel=None, root_quat=None, root_height=None):
         """ Resets ROOT states position and velocities of selected environmments
             Sets base position based on the curriculum
@@ -636,7 +649,7 @@ class LeggedRobot(BaseTask):
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
             if self.cfg.env.randomize_start_pos:
-                self.root_states[env_ids, :2] += torch_rand_float(-0.3, 0.3, (len(env_ids), 2), device=self.device) # xy position within 1m of the center
+                self.root_states[env_ids, :2] += torch_rand_float(-0.5, 0.5, (len(env_ids), 2), device=self.device) # xy position within 1m of the center
             if self.cfg.env.randomize_start_yaw:
                 rand_yaw = self.cfg.env.rand_yaw_range*torch_rand_float(-1, 1, (len(env_ids), 1), device=self.device).squeeze(1)
                 if self.cfg.env.randomize_start_pitch:
@@ -650,6 +663,9 @@ class LeggedRobot(BaseTask):
             
             if root_vel is not None:
                 self.root_states[env_ids, 7:10] = root_vel[:]
+            else:
+                self.root_states[env_ids, 7:10] = 0
+                self.root_states[env_ids, 10:13] = 0
             if root_quat is not None:
                 self.root_states[env_ids, 3:7] = root_quat[:]
             if root_height is not None:
@@ -658,6 +674,7 @@ class LeggedRobot(BaseTask):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, 7:13] = 0
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
@@ -756,6 +773,7 @@ class LeggedRobot(BaseTask):
         # self.force_sensor_tensor = gymtorch.wrap_tensor(force_sensor_tensor).view(self.num_envs, 2, 6) # for feet only, see create_env()
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
 
+        self.collide_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         # initialize some data used later on
         self.common_step_counter = 0
         self.extras = {}
@@ -770,6 +788,7 @@ class LeggedRobot(BaseTask):
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
         self.last_torques = torch.zeros_like(self.torques)
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
+        self.feet_air_flag = torch.zeros([self.num_envs, 1], dtype=torch.float, device=self.device, requires_grad=False)
 
         self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
 
@@ -935,6 +954,7 @@ class LeggedRobot(BaseTask):
                 2.3 create actor with these properties and add them to the env
              3. Store indices of different bodies of the robot
         """
+
         asset_path = self.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
         asset_root = os.path.dirname(asset_path)
         asset_file = os.path.basename(asset_path)
@@ -1047,6 +1067,9 @@ class LeggedRobot(BaseTask):
         # self.calf_indices = torch.zeros(len(calf_names), dtype=torch.long, device=self.device, requires_grad=False)
         # for i, name in enumerate(calf_names):
         #     self.calf_indices[i] = self.dof_names.index(name)
+
+        self.video_frames = []
+        self.record_now = False
     
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
@@ -1080,6 +1103,8 @@ class LeggedRobot(BaseTask):
         else:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+            self.env_goals = torch.zeros(self.num_envs, self.cfg.terrain.num_goals + self.cfg.env.num_future_goal_obs, 3, device=self.device, requires_grad=False)
+            self.cur_goal_idx = torch.zeros(self.num_envs, device=self.device, requires_grad=False, dtype=torch.long)
             # create a grid of robots
             num_cols = np.floor(np.sqrt(self.num_envs))
             num_rows = np.ceil(self.num_envs / num_cols)
@@ -1088,6 +1113,8 @@ class LeggedRobot(BaseTask):
             self.env_origins[:, 0] = spacing * xx.flatten()[:self.num_envs]
             self.env_origins[:, 1] = spacing * yy.flatten()[:self.num_envs]
             self.env_origins[:, 2] = 0.
+            self.cur_goals = self._gather_cur_goals()
+            self.next_goals = self._gather_cur_goals(future=1)
 
     def _parse_cfg(self, cfg):
         self.dt = self.cfg.control.decimation * self.sim_params.dt
@@ -1102,6 +1129,25 @@ class LeggedRobot(BaseTask):
         self.max_episode_length_s = self.cfg.env.episode_length_s
         self.max_episode_length = np.ceil(self.max_episode_length_s / self.dt)
         self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+
+    def _render_headless(self):
+        if self.record_now and len(self.video_frames) < 200:
+            bx, by, bz = self.root_states[0, 0], self.root_states[0, 1], self.root_states[0, 2]
+            target_loc = [bx, by , bz]
+            cam_distance = [0, -1.0, 1.0]
+            self.rendering_camera.set_position(target_loc, cam_distance)
+            video_frame = self.rendering_camera.get_observation()
+            self.video_frames.append(video_frame)
+
+    def get_complete_frames(self):
+        if self.video_frames is None or len(self.video_frames) < 200 or not self.record_now:
+            return None
+        self.record_now = False
+        return self.video_frames
+    
+    def start_recording(self):
+        self.video_frames = []
+        self.record_now = True
 
     def _draw_height_samples(self):
         """ Draws visualizations for dubugging (slows down simulation a lot).
@@ -1257,9 +1303,6 @@ class LeggedRobot(BaseTask):
 
     ################## parkour rewards ##################
 
-    def _reward_height(self):
-        return torch.clip(self.root_states[:, 2], 0, 0.6)
-
     def _reward_alive(self):
         return 1.
 
@@ -1276,6 +1319,7 @@ class LeggedRobot(BaseTask):
     
     def _reward_lin_vel_z(self):
         rew = torch.square(self.base_lin_vel[:, 2])
+        rew = torch.clamp(rew, max=4)
         return rew
     
     def _reward_ang_vel_xy(self):

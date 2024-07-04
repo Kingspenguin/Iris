@@ -47,10 +47,11 @@ def train(args):
     except:
         pass
     if args.debug:
+        args.headless = False
         mode = "disabled"
         args.rows = 10
         args.cols = 5
-        args.num_envs = 1
+        args.num_envs = 2
     else:
         mode = "online"
     
@@ -61,8 +62,10 @@ def train(args):
     wandb.init(project=args.proj_name, name=args.exptid, entity=args.entity, mode=mode, dir="../../logs")
     wandb.save(LEGGED_GYM_ENVS_DIR + "/base/legged_robot_config.py", policy="now")
     wandb.save(LEGGED_GYM_ENVS_DIR + "/base/legged_robot.py", policy="now")
-    wandb.save(LEGGED_GYM_ENVS_DIR + "/h1/h1_mimic_config.py", policy="now")
-    wandb.save(LEGGED_GYM_ENVS_DIR + "/h1/h1_mimic.py", policy="now")
+    wandb.save(LEGGED_GYM_ENVS_DIR + "/g1/g1_mimic.py", policy="now")
+    wandb.save(LEGGED_GYM_ENVS_DIR + "/g1/g1_config.py", policy="now")
+    # wandb.save(LEGGED_GYM_ENVS_DIR + "/h1/h1_mimic_config.py", policy="now")
+    # wandb.save(LEGGED_GYM_ENVS_DIR + "/h1/h1_mimic.py", policy="now")
 
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
     ppo_runner, train_cfg = task_registry.make_alg_runner(log_root = log_pth, env=env, name=args.task, args=args)

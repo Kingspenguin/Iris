@@ -50,6 +50,7 @@ from PIL import Image
 from legged_gym.utils.helpers import get_load_path as get_load_path_auto
 from tqdm import tqdm
 import random
+import math
 
 def get_load_path(root, load_run=-1, checkpoint=-1, model_name_include="jit"):
     if checkpoint==-1:
@@ -210,6 +211,7 @@ def play(args):
             actions = policy(obs.detach(), hist_encoding=True)
         
         actions = actions.detach()
+        # actions[:, 5] = 4 * math.sin(time() * 2)
         # actions[:, 0] = -2
         # actions[:, 3] = 2
         obs, _, rews, dones, infos = env.step(actions)

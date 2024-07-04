@@ -336,8 +336,8 @@ class Terrain:
         end_y = self.border + (j + 1) * self.width_per_env_pixels
         self.height_field_raw[start_x: end_x, start_y:end_y] = terrain.height_field_raw
 
-        # env_origin_x = (i + 0.5) * self.env_length
-        env_origin_x = i * self.env_length + 1.0
+        env_origin_x = (i + 0.5) * self.env_length
+        # env_origin_x = i * self.env_length + 1.0
         env_origin_y = (j + 0.5) * self.env_width
         x1 = int((self.env_length/2. - 0.5) / terrain.horizontal_scale) # within 1 meter square range
         x2 = int((self.env_length/2. + 0.5) / terrain.horizontal_scale)

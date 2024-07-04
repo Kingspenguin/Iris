@@ -30,6 +30,8 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
+ACTUATE_LEG = True
+ACTUATE_ARM = True
 
 class G1Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
@@ -49,14 +51,15 @@ class G1Cfg( LeggedRobotCfg ):
         prop_hist_len = 4
         n_feature = prop_hist_len * n_proprio
 
-        n_command = 4
+        n_command = 3
 
         # num_observations = n_feature + n_proprio + n_demo + n_scan + history_len*n_proprio + n_priv_latent + n_priv # with motion
         num_observations = 1 + n_command + n_proprio + n_scan + history_len*n_proprio + n_priv_latent + n_priv
 
-        episode_length_s = 50 # episode length in seconds
+        episode_length_s = 20 # episode length in seconds
         
-        num_policy_actions = 12
+        num_policy_actions = 12 * ACTUATE_LEG + 8 * ACTUATE_ARM
+        randomize_start_pos = True
     
     class motion:
         motion_curriculum = True
@@ -74,6 +77,8 @@ class G1Cfg( LeggedRobotCfg ):
         step_inplace_prob = 0.05
         resample_step_inplace_interval_s = 10
 
+    class sim( LeggedRobotCfg.sim ):
+        render = True
 
     class terrain( LeggedRobotCfg.terrain ):
         mesh_type = 'trimesh'
@@ -81,70 +86,91 @@ class G1Cfg( LeggedRobotCfg ):
         height = [0., 0.04]
     
     class init_state( LeggedRobotCfg.init_state ):
-        pos = [0.0, 0.0, 0.85] # x,y,z [m]
+        pos = [0.0, 0.0, 1.0] # x,y,z [m]
         # joint two four six must be non-zero (see urdf)
-        hip_pitch = 0
-        knee = 0
-        ankle_pitch = 0
-        shoulder_pitch = 0.3
-        elbow_pitch = -0.3
+
+        hip_pitch = -0.3
+        hip_roll = 0.
+        hip_yaw = 0.
+
+        knee = 0.6
+
+        ankle_pitch = -0.3
+        ankle_roll = 0.
+
+        shoulder_pitch = 0.
+        shoulder_roll = 0.2
+        shoulder_yaw = 0.
+
+        elbow_pitch = 0.
+        elbow_roll = 0.
+
+        zero_joint = 0.
+        one_joint = 0.6
+        two_joint = 0.9
+
+        three_joint = 1.2
+        four_joint = 1.2
+
+        five_joint = 1.2
+        six_joint = 1.2
+
         default_joint_angles = { # = target angles [rad] when action = 0.0
             'left_hip_pitch_joint': hip_pitch,
-            'left_hip_roll_joint': 0,
-            'left_hip_yaw_joint': 0,
+            'left_hip_roll_joint': hip_roll,
+            'left_hip_yaw_joint': hip_yaw,
             'left_knee_joint': knee,
             'left_ankle_pitch_joint': ankle_pitch,
-            'left_ankle_roll_joint': 0,
+            'left_ankle_roll_joint': ankle_roll,
             'right_hip_pitch_joint': hip_pitch,
-            'right_hip_roll_joint': 0,
-            'right_hip_yaw_joint': 0,
+            'right_hip_roll_joint': -hip_roll,
+            'right_hip_yaw_joint': -hip_yaw,
             'right_knee_joint': knee,
             'right_ankle_pitch_joint': ankle_pitch,
-            'right_ankle_roll_joint': 0,
-            ###########################
+            'right_ankle_roll_joint': -ankle_roll,
+            ################################
             'torso_joint': 0,
             'left_shoulder_pitch_joint': shoulder_pitch,
-            'left_shoulder_roll_joint': 0.2,
-            'left_shoulder_yaw_joint': -0.2,
+            'left_shoulder_roll_joint': shoulder_roll,
+            'left_shoulder_yaw_joint': shoulder_yaw,
             'left_elbow_pitch_joint': elbow_pitch,
-            'left_elbow_roll_joint': 0,
-            'left_five_joint': -0.6,
-            'left_six_joint': -0.6,
-            'left_three_joint': -0.6,
-            'left_four_joint': -0.6,
-            'left_zero_joint': 0,
-            'left_one_joint': 0.6,
-            'left_two_joint': 0.6,
+            'left_elbow_roll_joint': -elbow_roll,
+            'left_five_joint': -five_joint,
+            'left_six_joint': -six_joint,
+            'left_three_joint': -three_joint,
+            'left_four_joint': -four_joint,
+            'left_zero_joint': zero_joint,
+            'left_one_joint': one_joint,
+            'left_two_joint': two_joint,
             'right_shoulder_pitch_joint': shoulder_pitch,
-            'right_shoulder_roll_joint': -0.2,
-            'right_shoulder_yaw_joint': 0.2,
+            'right_shoulder_roll_joint': -shoulder_roll,
+            'right_shoulder_yaw_joint': -shoulder_yaw,
             'right_elbow_pitch_joint': elbow_pitch,
-            'right_elbow_roll_joint': 0,
-            'right_five_joint': 0.6,
-            'right_six_joint': 0.6,
-            'right_three_joint': 0.6,
-            'right_four_joint': 0.6,
-            'right_zero_joint': 0,
-            'right_one_joint': -0.6,
-            'right_two_joint': -0.6,
+            'right_elbow_roll_joint': elbow_roll,
+            'right_five_joint': five_joint,
+            'right_six_joint': six_joint,
+            'right_three_joint': three_joint,
+            'right_four_joint': four_joint,
+            'right_zero_joint': zero_joint,
+            'right_one_joint': -one_joint,
+            'right_two_joint': -two_joint,
         }
 
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
         control_type = 'P'
-        hand_stiffness = 0.3
-        hand_damping = 0.002
-        stiffness = {'hip_yaw': 120,
-                     'hip_roll': 120,
-                     'hip_pitch': 120,
-                     'knee': 80,
-                     'ankle_pitch': 20,
+        hand_stiffness = 0.5
+        hand_damping = 0.003
+        stiffness = {'hip_yaw': 80,
+                     'hip_roll': 200,
+                     'hip_pitch': 160,
+                     'knee': 200,
+                     'ankle_pitch': 15,
                      'ankle_roll': 10,
                      'torso': 150,
                      'shoulder': 40,
-                     "elbow_pitch": 10,
+                     "elbow_pitch": 40,
                      "elbow_roll": 5,
-                     'palm': 5,
                      'zero': hand_stiffness,
                      'one': hand_stiffness,
                      'two': hand_stiffness,
@@ -153,17 +179,16 @@ class G1Cfg( LeggedRobotCfg ):
                      'five': hand_stiffness,
                      'six': hand_stiffness,
                      }  # [N*m/rad]
-        damping = {  'hip_yaw': 3,
+        damping = {  'hip_yaw': 1,
                      'hip_roll': 3,
-                     'hip_pitch': 3,
-                     'knee': 4,
-                     'ankle_pitch': 0.5,
-                     'ankle_roll': 0.5,
-                     'torso': 3.5,
-                     'shoulder': 2,
+                     'hip_pitch': 10,
+                     'knee': 3,
+                     'ankle_pitch': 0.05,
+                     'ankle_roll': 0.05,
+                     'torso': 4,
+                     'shoulder': 0.5,
                      "elbow_pitch":0.5,
                      "elbow_roll":0.1,
-                     'palm': 0.1,
                      'zero': hand_damping,
                      'one': hand_damping,
                      'two': hand_damping,
@@ -172,9 +197,9 @@ class G1Cfg( LeggedRobotCfg ):
                      'five': hand_damping,
                      'six': hand_damping,
                      }  # [N*m/rad]  # [N*m*s/rad]
-
-        legs_only = True
-        action_scale = 0.5
+        legs_only = ACTUATE_LEG and not ACTUATE_ARM
+        legs_arm_only = ACTUATE_LEG and ACTUATE_ARM
+        action_scale = 0.25
         decimation = 4
 
     class normalization( LeggedRobotCfg.normalization):
@@ -185,17 +210,21 @@ class G1Cfg( LeggedRobotCfg ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/g1/g1_custom.urdf'
         torso_name = "torso_link"
         foot_name = "ankle_roll"
-        penalize_contacts_on = ["shoulder", "elbow", "hip"]
-        terminate_after_contacts_on = ["torso_link", ]#, "thigh", "calf"]
+        penalize_contacts_on = ["shoulder", "elbow", "hip", "torso_link"]
+        terminate_after_contacts_on = []#"torso_link", ]#, "thigh", "calf"]
         self_collisions = 0 # 1 to disable, 0 to enable...bitwise filter
   
     class rewards( LeggedRobotCfg.rewards ):
+        base_height_target = 0.75
         class scales:
             # tracking rewards
-            # alive = 3
+            # alive = 5
             height = 10
-            tracking_vx = 0.
-            tracking_ang_vel = 0.
+            # base_height = 0
+            tracking_vx = 3
+            tracking_ang_vel = 3
+            # tracking_vx_sqr = -0.1
+            # tracking_ang_vel_sqr = -0.1
             # tracking_demo_goal_vel = 1.0
             # tracking_mul = 6
             # tracking_lin_vel = 6
@@ -205,18 +234,17 @@ class G1Cfg( LeggedRobotCfg ):
 
             # tracking_demo_yaw = 1
             # tracking_demo_roll_pitch = 1
-            orientation = -2
             # tracking_demo_dof_pos = 3
             # tracking_demo_dof_vel = 1.0
             # tracking_demo_key_body = 2
             # tracking_demo_height = 1  # useful if want better height tracking
-            
             # tracking_demo_lin_vel = 1
             # tracking_demo_ang_vel = 0.5
+
             # regularization rewards
             lin_vel_z = -1.0
             ang_vel_xy = -0.4
-            # orientation = -1.
+            orientation = -2
             # dof_acc = -3e-7
             collision = -10.
             action_rate = -0.1
@@ -224,20 +252,49 @@ class G1Cfg( LeggedRobotCfg ):
             # torques = -1e-5
             energy = -1e-3
             # hip_pos = -0.5
-            dof_error = -0.1
-            feet_stumble = -2
+            # dof_error = -0.1
             # feet_edge = -1
-            feet_drag = -0.1
             dof_pos_limits = -10.0
-            # feet_air_time = 15
-            feet_height = 40
-            feet_force = -3e-2
+            feet_stumble = -2
+            feet_drag = -0.1
+            feet_air_time = 15
+            feet_height = 2
+            feet_force = 0.03
+            # termination = 0
+            # hip_roll = -3
+            # hip_yaw = -3
+            # zerocommand_action_rate = -1
+
+            # periodic action movement
+            hip_periodic_sqr = -0.002
+            knee_periodic_sqr = -0.002
+            # hip_periodic_norm = -1e-4
+            # knee_periodic_norm = -1e-4
+            # arm_periodic_sqr = -0.002
+            arm_action = -0.3
+            # arm_action_sqr = -10
+            # vx = 3
 
         only_positive_rewards = False
-        clip_rewards = True
-        soft_dof_pos_limit = 0.95
+        clip_rewards = False
+        soft_dof_pos_limit = 0.9
         base_height_target = 0.25
     
+    class commands:
+        curriculum = False
+        max_curriculum = 1.
+        num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        resampling_time = 6. # time before command are changed[s]
+        heading_command = True # if true: compute ang vel command from heading error
+        
+        lin_vel_clip = 0.2
+        ang_vel_clip = 0.2
+        class ranges:
+            lin_vel_x = [0.4, 1.0] # min max [m/s]
+            lin_vel_y = [-0.1, 0.1]#[0.15, 0.6]   # min max [m/s]
+            ang_vel_yaw = [-0.3, 0.3]    # min max [rad/s]
+            heading = [-1.6, 1.6]
+
     class domain_rand( LeggedRobotCfg.domain_rand ):
         randomize_gravity = True
         gravity_rand_interval_s = 10
@@ -257,9 +314,10 @@ class G1CfgPPO( LeggedRobotCfgPPO ):
         runner_class_name = "OnPolicyRunnerMimic"
         policy_class_name = 'ActorCriticMimic'
         algorithm_class_name = 'PPOMimic'
+        record_video_interval = 200
     
     class policy( LeggedRobotCfgPPO.policy ):
-        continue_from_last_std = False
+        continue_from_last_std = True
         text_feat_input_dim = G1Cfg.env.n_feature
         text_feat_output_dim = 16
         feat_hist_len = G1Cfg.env.prop_hist_len
@@ -271,7 +329,7 @@ class G1CfgPPO( LeggedRobotCfgPPO ):
 
     class estimator:
         train_with_estimated_states = False
-        learning_rate = 1.e-4
+        learning_rate = 1e-3
         hidden_dims = [128, 64]
         priv_states_dim = G1Cfg.env.n_priv
         priv_start = G1Cfg.env.n_feature + G1Cfg.env.n_proprio + G1Cfg.env.n_demo + G1Cfg.env.n_scan

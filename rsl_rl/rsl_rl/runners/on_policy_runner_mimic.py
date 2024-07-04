@@ -110,6 +110,7 @@ class OnPolicyRunnerMimic:
                                   device=self.device, **self.alg_cfg)
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
+        self.record_video_interval = self.cfg["record_video_interval"]
         self.dagger_update_freq = self.alg_cfg["dagger_update_freq"]
 
         self.alg.init_storage(
@@ -168,7 +169,6 @@ class OnPolicyRunnerMimic:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         self.start_learning_iteration = copy(self.current_learning_iteration)
-
         for it in range(self.current_learning_iteration, tot_iter):
             start = time.time()
             hist_encoding = it % self.dagger_update_freq == 0
@@ -176,6 +176,9 @@ class OnPolicyRunnerMimic:
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs, infos, hist_encoding)
+                    # actions *= 0
+                    # import math
+                    # actions[:, 1] = 2 * math.sin(time.time())
                     obs, privileged_obs, rewards, dones, infos = self.env.step(actions)  # obs has changed to next_obs !! if done obs has been reset
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
@@ -220,6 +223,9 @@ class OnPolicyRunnerMimic:
             learn_time = stop - start
             if self.log_dir is not None:
                 self.log(locals())
+            # if it % self.record_video_interval == 0:
+            #     self.env.start_recording()
+            # self.log_video(it)
             if it < 2500:
                 if it % self.save_interval == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
@@ -390,7 +396,17 @@ class OnPolicyRunnerMimic:
 
         ep_string = f''
         wandb_dict = {}
-        if locs['ep_infos']:
+        
+        if len(locs['rewbuffer']) > 0:
+            wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
+            # wandb_dict['Train/mean_reward_explr'] = statistics.mean(locs['rew_explr_buffer'])
+            wandb_dict['Train/mean_reward_task'] = statistics.mean(locs['task_rew_buf'])
+            # wandb_dict['Train/mean_reward_entropy'] = statistics.mean(locs['rew_entropy_buffer'])
+            wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
+            # wandb_dict['Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
+            # wandb_dict['Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
+
+        if locs['ep_infos'] and len(locs['rewbuffer']) > 0:
             for key in locs['ep_infos'][0]:
                 infotensor = torch.tensor([], device=self.device)
                 for ep_info in locs['ep_infos']:
@@ -404,10 +420,12 @@ class OnPolicyRunnerMimic:
                 # wandb_dict['Episode_rew/' + key] = value
                 if "tracking" in key:
                     wandb_dict['Episode_rew_tracking/' + key] = value
+                    wandb_dict['Rew_tracking/' + key] = value / wandb_dict['Train/mean_episode_length']
                 elif "curriculum" in key:
                     wandb_dict['Episode_curriculum/' + key] = value
                 else:
                     wandb_dict['Episode_rew_regularization/' + key] = value
+                    wandb_dict['Rew_regularization/' + key] = value / wandb_dict['Train/mean_episode_length']
                 ep_string += f"""{f'Mean episode {key}:':>{pad}} {value:.4f}\n"""
         mean_std = self.alg.actor_critic.std.mean()
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs['collection_time'] + locs['learn_time']))
@@ -429,14 +447,6 @@ class OnPolicyRunnerMimic:
         wandb_dict['Perf/total_fps'] = fps
         wandb_dict['Perf/collection time'] = locs['collection_time']
         wandb_dict['Perf/learning_time'] = locs['learn_time']
-        if len(locs['rewbuffer']) > 0:
-            wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
-            # wandb_dict['Train/mean_reward_explr'] = statistics.mean(locs['rew_explr_buffer'])
-            wandb_dict['Train/mean_reward_task'] = statistics.mean(locs['task_rew_buf'])
-            # wandb_dict['Train/mean_reward_entropy'] = statistics.mean(locs['rew_entropy_buffer'])
-            wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
-            # wandb_dict['Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
-            # wandb_dict['Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
 
         wandb.log(wandb_dict, step=locs['it'])
 
@@ -484,6 +494,14 @@ class OnPolicyRunnerMimic:
                        f"""{'Total time:':>{pad}} {self.tot_time:.2f}s\n"""
                        f"""{'ETA:':>{pad}} {mins:.0f} mins {secs:.1f} s\n""")
         print(log_string)
+
+    def log_video(self, it):
+        frames = self.env.get_complete_frames()
+        if frames is None:
+            return
+        else:
+            video_array = np.concatenate([np.expand_dims(frame, axis=0) for frame in frames ], axis=0).swapaxes(1, 3).swapaxes(2, 3)
+            wandb.log({"video": wandb.Video(video_array, fps=int(1/self.env.dt))}, step=it)
 
     def save(self, path, infos=None):
         state_dict = {

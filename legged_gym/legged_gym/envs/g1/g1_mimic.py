@@ -13,6 +13,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR, ASE_DIR
 from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.envs.base.legged_robot import LeggedRobot, euler_from_quaternion
 from legged_gym.utils.math import *
+from legged_gym.utils.helpers import FloatingCameraSensor
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg
 
 import sys
@@ -41,18 +42,21 @@ class G1Mimic(LeggedRobot):
         else:
             self.device = 'cpu'
         
-        if USE_MOTION:
-            self.init_motions(cfg)
-        else:
-            self._feet_air_flag = 1
-            self._feet_air_flag_time = time()
-            self._feet_air_flag_gap = 0.3
-        
         if cfg.motion.num_envs_as_motions:
             self.cfg.env.num_envs = self._motion_lib.num_motions()
         
         BaseTask.__init__(self, self.cfg, sim_params, physics_engine, sim_device, headless)
 
+        if USE_MOTION:
+            self.init_motions(cfg)
+        else:
+            self.switching_foot = 1
+            self._feet_air_flag = 1
+            self._feet_air_flag_gap = 0.3
+            self._feet_air_step_counter = 0
+            self._feet_air_switch_steps = int(self._feet_air_flag_gap / self.cfg.sim.dt / self.cfg.control.decimation)
+            self.action_history = torch.zeros(self.num_envs, self._feet_air_switch_steps + 1, self.num_actions, device=self.device, dtype=torch.float)
+        
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_buffers()
@@ -67,6 +71,8 @@ class G1Mimic(LeggedRobot):
 
         self.reset_idx(torch.arange(self.num_envs, device=self.device), init=True)
         self.post_physics_step()
+
+        self.rendering_camera = FloatingCameraSensor(self)
 
     def init_motions(self, cfg):
         self._key_body_ids = torch.tensor([3, 6, 9, 12], device=self.device)  #self._build_key_body_ids_tensor(key_bodies)
@@ -162,22 +168,30 @@ class G1Mimic(LeggedRobot):
                                      no_keybody=no_keybody, 
                                      regen_pkl=self.cfg.motion.regen_pkl)
         return
-    
-    def step(self, actions):
 
+    def step(self, actions):
         if self.cfg.control.legs_only == True:
             actions  = torch.cat([actions, torch.zeros(self.num_envs, 25, device=actions.device)], dim=1)
-
+        elif self.cfg.control.legs_arm_only == True:
+            full_actions = torch.zeros(self.num_envs, self.cfg.env.num_actions, device=actions.device)
+            full_actions[:, :12] = actions[:, :12]
+            full_actions[:, 13:17] = actions[:, 12:16]
+            full_actions[:, 25:29] = actions[:, 16:20]
+            full_actions[:, 14] = torch.clamp(full_actions[:, 14], min=0)
+            full_actions[:, 26] = torch.clamp(full_actions[:, 26], min=0)
+            actions = full_actions
+        
         if not USE_MOTION:
-            cur_time = time()
-            if self._feet_air_flag_time + self._feet_air_flag_gap < cur_time:
+
+            self._feet_air_step_counter = (self._feet_air_step_counter + 1) % self._feet_air_switch_steps
+            if self._feet_air_step_counter == 0:
                 self._feet_air_flag = 1 - self._feet_air_flag
-                self._feet_air_flag_time = cur_time
 
         actions = self.reindex(actions)
 
         actions.to(self.device)
         self.action_history_buf = torch.cat([self.action_history_buf[:, 1:].clone(), actions[:, None, :].clone()], dim=1)
+        self.action_history = torch.cat([self.action_history[:, 1:].clone(), actions[:, None, :].clone()], dim=1)
         if self.cfg.domain_rand.action_delay:
             if self.global_counter % self.cfg.domain_rand.delay_update_global_steps == 0:
                 if len(self.cfg.domain_rand.action_curr_step) != 0:
@@ -193,8 +207,9 @@ class G1Mimic(LeggedRobot):
         clip_actions = self.cfg.normalization.clip_actions / self.cfg.control.action_scale
         self.actions = torch.clip(actions, -clip_actions, clip_actions).to(self.device)
         self.render()
-                
-        self.actions[:, [4, 9]] = torch.clamp(self.actions[:, [4, 9]], -0.5, 0.5)
+        
+        # self.actions[:, [2, 4, 8, 10]] = torch.clamp(self.actions[:, [2, 4, 8, 10]], -0.5, 0.5)
+        self.actions[:, [4, 10]] = torch.clamp(self.actions[:, [4, 10]], -1.0, 1.0)
         for _ in range(self.cfg.control.decimation):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             # for i in range(len(self.dof_names)):
@@ -311,6 +326,7 @@ class G1Mimic(LeggedRobot):
         self.obs_history_buf[env_ids, :, :] = 0.  # reset obs history buffer TODO no 0s
         self.contact_buf[env_ids, :, :] = 0.
         self.action_history_buf[env_ids, :, :] = 0.
+        self.action_history[env_ids, :, :] = 0.
         self.cur_goal_idx[env_ids] = 0
         self.reach_goal_timer[env_ids] = 0
 
@@ -499,15 +515,19 @@ class G1Mimic(LeggedRobot):
                 self.obs_buf = torch.cat([motion_features, obs_buf, obs_demo, heights, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
             else:
                 self.obs_buf = torch.cat([motion_features, obs_buf, obs_demo, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
-            
+        
         else:
-            
-            feet_air_flag = torch.ones([self.num_envs, 1]).to(self.root_states.device) * self._feet_air_flag
+            self.feet_air_flag[:, 0] = self._feet_air_flag - self._feet_air_step_counter / self._feet_air_switch_steps
+            if torch.abs(self.feet_air_flag[0, 0]) < 0.15 or 1 - torch.abs(self.feet_air_flag[0, 0]) < 0.15:
+                self.switching_foot = 1
+            else:
+                self.switching_foot = 0
+                
             if self.cfg.terrain.measure_heights:
                 heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.3 - self.measured_heights, -1, 1.)
-                self.obs_buf = torch.cat([feet_air_flag, self.commands, obs_buf, heights, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
+                self.obs_buf = torch.cat([self.feet_air_flag, self.commands[:, :3], obs_buf, heights, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
             else:
-                self.obs_buf = torch.cat([feet_air_flag, self.commands, obs_buf, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
+                self.obs_buf = torch.cat([self.feet_air_flag, self.commands[:, :3], obs_buf, priv_explicit, priv_latent, self.obs_history_buf.view(self.num_envs, -1)], dim=-1)
 
         self.obs_history_buf = torch.where(
             (self.episode_length_buf <= 1)[:, None, None], 
@@ -580,6 +600,9 @@ class G1Mimic(LeggedRobot):
         # roll_cutoff = torch.abs(self.roll) > 1.0
         # pitch_cutoff = torch.abs(self.pitch) > 1.0
         # height_cutoff = self.root_states[:, 2] < 0.5
+
+        height_positive = self.root_states[:, 2] < 0.3
+        self.reset_buf |= height_positive
 
         if USE_MOTION:
             dof_dev = self._reward_tracking_demo_dof_pos() < 0.1
@@ -707,6 +730,9 @@ class G1Mimic(LeggedRobot):
             self.rew_buf += rew
             self.episode_sums["termination"] += rew
         
+    def _reward_termination(self):
+        return self.reset_buf
+
     def _reward_tracking_demo_goal_vel(self):
         norm = torch.norm(self._curr_demo_root_vel[:, :3], dim=-1, keepdim=True)
         target_vec_norm = self._curr_demo_root_vel[:, :3] / (norm + 1e-5)
@@ -720,15 +746,96 @@ class G1Mimic(LeggedRobot):
         # return torch.exp(-2 * torch.norm(cur_vel - self._curr_demo_root_vel[:, :2], dim=-1))
         return rew.squeeze(-1)
 
-    def _reward_tracking_vx(self):
-        rew = torch.minimum(self.base_lin_vel[:, 0], self.commands[:, 0]) / (self.commands[:, 0] + 1e-5)
-        # print("vx rew", rew, self.base_lin_vel[:, 0], self.commands[:, 0])
+    def _reward_hip_roll(self):
+        dof_pos = self.default_dof_pos_all - self.dof_pos
+        return torch.square(dof_pos[:, 1]) + torch.square(dof_pos[:, 7])
+
+    def _reward_hip_yaw(self):
+        dof_pos = self.default_dof_pos_all - self.dof_pos
+        return torch.square(dof_pos[:, 2]) + torch.square(dof_pos[:, 8])
+    
+    def _reward_hip_periodic_sqr(self):
+        hip_flip = torch.ones(self.num_envs, 3, device=self.device, dtype=torch.float)
+        hip_flip[:, 1:3] = -1
+        rew = torch.square(self.action_history[:, 0, 0:3] - self.action_history[:, self._feet_air_switch_steps, 6:9] * hip_flip).sum(dim=1)
+        rew += torch.square(self.action_history[:, 0, 6:9] - self.action_history[:, self._feet_air_switch_steps, 0:3] * hip_flip).sum(dim=1)
+        rew[self.action_history[:, self._feet_air_switch_steps, 0] == 0] = 0
         return rew
+
+    def _reward_knee_periodic_sqr(self):
+        rew = torch.square(self.action_history[:, 0, 3] - self.action_history[:, self._feet_air_switch_steps, 9])
+        rew += torch.square(self.action_history[:, 0, 9] - self.action_history[:, self._feet_air_switch_steps, 3])
+        rew[self.action_history[:, self._feet_air_switch_steps, 0] == 0] = 0
+        return rew
+
+    def _reward_hip_periodic_norm(self):
+        hip_flip = torch.ones(self.num_envs, 3, device=self.device, dtype=torch.float)
+        hip_flip[:, 1:3] = -1
+        rew = torch.abs(self.action_history[:, 0, 0:3] - self.action_history[:, self._feet_air_switch_steps, 6:9] * hip_flip).sum(dim=1)
+        rew += torch.abs(self.action_history[:, 0, 6:9] - self.action_history[:, self._feet_air_switch_steps, 0:3] * hip_flip).sum(dim=1)
+        rew[self.action_history[:, self._feet_air_switch_steps, 0] == 0] = 0
+        return rew
+
+    def _reward_knee_periodic_norm(self):
+        rew = torch.abs(self.action_history[:, 0, 3] - self.action_history[:, self._feet_air_switch_steps, 9])
+        rew += torch.abs(self.action_history[:, 0, 9] - self.action_history[:, self._feet_air_switch_steps, 3])
+        rew[self.action_history[:, self._feet_air_switch_steps, 0] == 0] = 0
+        return rew
+    
+    def _reward_arm_periodic_sqr(self):
+        hip_flip = torch.ones(self.num_envs, 4, device=self.device, dtype=torch.float)
+        hip_flip[:, 1:3] = -1
+        rew = torch.square(self.action_history[:, 0, 13:17] - self.action_history[:, self._feet_air_switch_steps, 25:29]).sum(dim=1)
+        rew += torch.square(self.action_history[:, 0, 25:29] - self.action_history[:, self._feet_air_switch_steps, 13:17]).sum(dim=1)
+        rew[self.action_history[:, self._feet_air_switch_steps, 0] == 0] = 0
+        # full_actions[:, 13:17] = actions[:, 12:16]
+        # full_actions[:, 25:29] = actions[:, 16:20]
+        return rew
+    
+    def _reward_arm_action(self):
+        rew = torch.abs(self.actions[:, 13:17]).sum(dim=1)
+        rew += torch.abs(self.actions[:, 25:29]).sum(dim=1)
+        return rew
+
+    def _reward_arm_action_sqr(self):
+        rew = torch.square(self.actions[:, 13:17]).sum(dim=1)
+        rew += torch.square(self.actions[:, 25:29]).sum(dim=1)
+        return rew
+    
+    # def _reward_tracking_vx(self):
+    #     rew = torch.minimum(self.base_lin_vel[:, 0], self.commands[:, 0]) / (self.commands[:, 0] + 1e-5)
+    #     # print("vx rew", rew, self.base_lin_vel[:, 0], self.commands[:, 0])
+    #     return rew
+    
+    # def _reward_tracking_ang_vel(self):
+    #     rew = torch.minimum(self.base_ang_vel[:, 2], self.commands[:, 2]) / (self.commands[:, 2] + 1e-5)
+    #     return rew
+    
+    def _reward_vx(self):
+        vx = torch.clamp(self.base_lin_vel[:, 0], min=-2, max=2)
+        return vx
+
+    def _reward_tracking_vx(self):
+        # Tracking of linear velocity commands (xy axes)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error/self.cfg.rewards.tracking_sigma)
     
     def _reward_tracking_ang_vel(self):
-        rew = torch.minimum(self.base_ang_vel[:, 2], self.commands[:, 2]) / (self.commands[:, 2] + 1e-5)
-        return rew
+        # Tracking of angular velocity commands (yaw) 
+        # print(self.commands)
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)
+
+    def _reward_tracking_vx_sqr(self):
+        # Tracking of linear velocity commands (xy axes)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return lin_vel_error
     
+    def _reward_tracking_ang_vel_sqr(self):
+        # Tracking of angular velocity commands (yaw) 
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return ang_vel_error
+
     def _reward_tracking_demo_yaw(self):
         rew = torch.exp(-torch.abs(self.target_yaw - self.yaw))
         # print("yaw rew", rew, self.target_yaw, self.yaw)
@@ -847,27 +954,58 @@ class G1Mimic(LeggedRobot):
 
     def _reward_feet_height(self):
         feet_height = self.rigid_body_states[:, self.feet_indices, 2]
-        
         if USE_MOTION:
             rew = torch.clamp(torch.norm(feet_height, dim=-1) - 0.2, max=0)
             rew[self._in_place_flag] = 0
         else:
-            rew = torch.clamp(feet_height[..., self._feet_air_flag] - 0.2, max=0)
+            nonzero_command = 1 - torch.all(self.commands[:, :3] == 0, dim=1).float()
+            rew = nonzero_command * torch.clamp(feet_height[..., self._feet_air_flag], max=0.1, min=0)
+
+        # if self.switching_foot:
+        #     rew = 0
+        
+        # print(feet_height, self._feet_air_flag)
         # print("height: ", rew[self.lookat_id])
         return rew
     
     def _reward_feet_force(self):
-        
+
         if USE_MOTION:
             rew = torch.norm(self.contact_forces[:, self.feet_indices, 2], dim=-1)
             rew[self._in_place_flag] = 0
         else:
-            rew = self.contact_forces[:, self.feet_indices, 2][..., self._feet_air_flag]
-        rew[rew < 500] = 0
-        rew[rew > 500] = 500
+            nonzero_command = 1 - torch.all(self.commands[:, :3] == 0, dim=1).float()
+            rew = nonzero_command * self.contact_forces[:, self.feet_indices, 2][..., 1 - self._feet_air_flag]
+        rew = torch.clamp(rew, min=0, max=400)
+
+        # if self.switching_foot:
+        #     rew = 0
+
         # print(rew[self.lookat_id])
         # print(self.dof_names)
         return rew
+    
+    def _reward_height(self):
+        base_height = self.root_states[:, 2]
+        rew = torch.zeros_like(base_height, device=base_height.device)
+        rew[base_height > 0.5] = base_height[base_height > 0.5]
+        rew = torch.clip(rew, max=0.7)
+        return rew
+
+    def _reward_base_height(self):
+        # Penalize base height away from target
+        base_height = self.root_states[:, 2]
+        # print(base_height)
+        base_height = torch.clip(base_height, min=0, max=2)
+        return torch.square(base_height - self.cfg.rewards.base_height_target)
+    
+    # def _reward_height(self):
+    #     feet_force = torch.sum(self.contact_forces[:, self.feet_indices, 2], dim=-1) != 0
+    #     return torch.clip(self.root_states[:, 2], 0, 1)# * feet_force
+
+    def _reward_zerocommand_action_rate(self):
+        zero_command = torch.all(self.commands[:, :3] == 0, dim=1)
+        return zero_command * torch.norm(self.last_actions - self.actions, dim=1)
 
     def _reward_dof_error(self):
         dof_error = torch.sum(torch.square(self.dof_pos - self.default_dof_pos)[:, :11], dim=1)

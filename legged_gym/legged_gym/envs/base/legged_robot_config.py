@@ -54,13 +54,8 @@ class LeggedRobotCfg(BaseConfig):
         episode_length_s = 20 # episode length in seconds
         obs_type = "og"
 
-
-        
-        
-        
         history_encoding = True
         reorder_dofs = True
-        
         
         # action_delay_range = [0, 5]
 
@@ -87,6 +82,9 @@ class LeggedRobotCfg(BaseConfig):
         num_future_goal_obs = 2
         record_video = False
         record_frame = False
+
+        recording_width_px = 240
+        recording_height_px = 240
 
     class depth:
         use_camera = False
@@ -145,7 +143,7 @@ class LeggedRobotCfg(BaseConfig):
         horizontal_scale = 0.15 # [m] influence computation time by a lot
         horizontal_scale_camera = 0.1
         vertical_scale = 0.005 # [m]
-        border_size = 5 # [m]
+        border_size = 0. # [m]
         height = [0.04, 0.12]
         simplify_grid = False
         gap_size = [0.02, 0.1]
@@ -167,10 +165,10 @@ class LeggedRobotCfg(BaseConfig):
         selected = False # select a unique terrain type and pass all arguments
         terrain_kwargs = None # Dict of arguments for selected terrain
         max_init_terrain_level = 5 # starting curriculum state
-        terrain_length = 18.
-        terrain_width = 4
+        terrain_length = 20.
+        terrain_width = 20.
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
-        num_cols = 40 # number of terrain cols (types)
+        num_cols = 10 # number of terrain cols (types)
         
         terrain_dict = {"smooth slope": 0., 
                         "rough slope up": 0.0,
@@ -208,7 +206,7 @@ class LeggedRobotCfg(BaseConfig):
         heading_command = True # if true: compute ang vel command from heading error
         
         lin_vel_clip = 0.2
-        ang_vel_clip = 0.4
+        ang_vel_clip = 0.2
         class ranges:
             lin_vel_x = [0.4, 1.0] # min max [m/s]
             lin_vel_y = [-0.3, 0.3]#[0.15, 0.6]   # min max [m/s]
@@ -264,7 +262,7 @@ class LeggedRobotCfg(BaseConfig):
         added_com_range = [-0.07, 0.07]
         push_robots = True
         push_interval_s = 8
-        max_push_vel_xy = 0.3
+        max_push_vel_xy = 0.5
 
         randomize_motor = True
         motor_strength_range = [0.8, 1.2]
@@ -300,16 +298,12 @@ class LeggedRobotCfg(BaseConfig):
             dof_pos_limits = -50.0
             
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.2 # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1 # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1
         soft_torque_limit = 0.4
         base_height_target = 1.
         max_contact_force = 40. # forces above this value are penalized
-
-
-
-
 
     # viewer camera:
     class viewer:
@@ -322,6 +316,7 @@ class LeggedRobotCfg(BaseConfig):
         substeps = 1
         gravity = [0., 0. ,-9.81]  # [m/s^2]
         up_axis = 1  # 0 is y, 1 is z
+        render = False
 
         class physx:
             num_threads = 10

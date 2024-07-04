@@ -181,7 +181,7 @@ class H1_Cfg( LeggedRobotCfg ):
         n_feature = prop_hist_len * n_proprio
 
         # num_observations = n_feature + n_proprio + n_demo + n_scan + history_len*n_proprio + n_priv_latent + n_priv # with motion
-        num_observations = n_proprio + n_scan + history_len*n_proprio + n_priv_latent + n_priv
+        num_observations = 1 + 4 + n_proprio + n_scan + history_len*n_proprio + n_priv_latent + n_priv
 
         episode_length_s = 50 # episode length in seconds
         
