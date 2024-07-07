@@ -38,6 +38,8 @@ class G1Cfg( LeggedRobotCfg ):
         num_envs = 4000
         num_actions = 37
 
+        # num_actions = 37
+
         n_demo_steps = 2
         n_demo = 9 + 3 + 3 + 3 +6*3  #observe height
         interval_demo_steps = 0.1
@@ -87,22 +89,51 @@ class G1Cfg( LeggedRobotCfg ):
     
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 1.0] # x,y,z [m]
+
+        rot = [0.0, 0.4, 0.0, 0.6] # x,y,z,w [quat]
+
         # joint two four six must be non-zero (see urdf)
 
-        hip_pitch = -0.3
-        hip_roll = 0.
+        # hip_pitch = -0.3
+        # hip_roll = 0.
+        # hip_yaw = 0.
+
+        # knee = 0.6
+
+        # ankle_pitch = -0.3
+        # ankle_roll = 0.
+
+        # shoulder_pitch = 0.
+        # shoulder_roll = 0.2
+        # shoulder_yaw = 0.
+
+        # elbow_pitch = 0.
+        # elbow_roll = 0.
+
+        # zero_joint = 0.
+        # one_joint = 0.6
+        # two_joint = 0.9
+
+        # three_joint = 1.2
+        # four_joint = 1.2
+
+        # five_joint = 1.2
+        # six_joint = 1.2
+
+        hip_pitch = -1.5
+        hip_roll = 0.2
         hip_yaw = 0.
 
         knee = 0.6
 
-        ankle_pitch = -0.3
-        ankle_roll = 0.
+        ankle_pitch = -0.9
+        ankle_roll = -0.2
 
-        shoulder_pitch = 0.
-        shoulder_roll = 0.2
+        shoulder_pitch = -1.5
+        shoulder_roll = 0.4
         shoulder_yaw = 0.
 
-        elbow_pitch = 0.
+        elbow_pitch = 0.9
         elbow_roll = 0.
 
         zero_joint = 0.
@@ -129,7 +160,7 @@ class G1Cfg( LeggedRobotCfg ):
             'right_ankle_pitch_joint': ankle_pitch,
             'right_ankle_roll_joint': -ankle_roll,
             ################################
-            'torso_joint': 0,
+            'torso_joint': 0.,
             'left_shoulder_pitch_joint': shoulder_pitch,
             'left_shoulder_roll_joint': shoulder_roll,
             'left_shoulder_yaw_joint': shoulder_yaw,

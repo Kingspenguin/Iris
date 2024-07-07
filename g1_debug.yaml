@@ -41,7 +41,7 @@ spec:
           value: "a14459c6f0305e04b9b7db0721941580070fcdd1"
 
         volumeMounts:
-        - mountPath: /g1_wandb
+        - mountPath: /g1_jianhan_0704
           name: g1-volume
         resources:
           limits:
