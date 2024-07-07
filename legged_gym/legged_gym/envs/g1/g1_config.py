@@ -246,7 +246,8 @@ class G1Cfg( LeggedRobotCfg ):
         self_collisions = 0 # 1 to disable, 0 to enable...bitwise filter
   
     class rewards( LeggedRobotCfg.rewards ):
-        base_height_target = 0.75
+        # base_height_target = 0.75
+        base_height_target = 0.65
         class scales:
             # tracking rewards
             # alive = 5
