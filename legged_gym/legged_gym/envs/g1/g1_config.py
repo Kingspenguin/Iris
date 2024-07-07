@@ -36,9 +36,9 @@ ACTUATE_ARM = True
 class G1Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
         num_envs = 4000
-        num_actions = 37
+        # num_actions = 24
 
-        # num_actions = 37
+        num_actions = 37
 
         n_demo_steps = 2
         n_demo = 9 + 3 + 3 + 3 +6*3  #observe height
@@ -239,6 +239,7 @@ class G1Cfg( LeggedRobotCfg ):
     class asset( LeggedRobotCfg.asset ):
         # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1/h1_blue_red_custom_collision.urdf'
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/g1/g1_custom.urdf'
+        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/g1/g1_custom_23.urdf'
         torso_name = "torso_link"
         foot_name = "ankle_roll"
         penalize_contacts_on = ["shoulder", "elbow", "hip", "torso_link"]
