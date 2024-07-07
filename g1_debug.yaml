@@ -42,7 +42,7 @@ spec:
 
         volumeMounts:
         - mountPath: /g1_jianhan_quad
-          name: g1-volume
+          name: g1-volume-quad
         resources:
           limits:
             nvidia.com/gpu: "1"
@@ -50,11 +50,11 @@ spec:
             cpu: "4"
           requests:
             nvidia.com/gpu: "1"
-            memory: "16G"
+            memory: "32G"
             cpu: "4"
       restartPolicy: Never
       volumes:
-      - name: g1-volume
+      - name: g1-volume-quad
         persistentVolumeClaim:
-          claimName: g1-volume
+          claimName: g1-volume-quad
 

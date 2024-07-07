@@ -88,7 +88,7 @@ class G1Cfg( LeggedRobotCfg ):
         height = [0., 0.04]
     
     class init_state( LeggedRobotCfg.init_state ):
-        pos = [0.0, 0.0, 1.0] # x,y,z [m]
+        pos = [0.0, 0.0, .6] # x,y,z [m]
 
         rot = [0.0, 0.4, 0.0, 0.6] # x,y,z,w [quat]
 
@@ -124,13 +124,13 @@ class G1Cfg( LeggedRobotCfg ):
         hip_roll = 0.2
         hip_yaw = 0.
 
-        knee = 0.6
+        knee = 0.9
 
         ankle_pitch = -0.9
         ankle_roll = -0.2
 
         shoulder_pitch = -1.5
-        shoulder_roll = 0.4
+        shoulder_roll = 0.6
         shoulder_yaw = 0.
 
         elbow_pitch = 0.9
