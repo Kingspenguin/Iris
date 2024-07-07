@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: jianhan-g1-training
+  name: jianhan-g1-training-quad
 spec:
   template:
     spec:
@@ -34,19 +34,19 @@ spec:
             source activate humanoid &&
             cd legged_gym/legged_gym/scripts &&
             wandb login a14459c6f0305e04b9b7db0721941580070fcdd1 &&
-            /opt/conda/envs/humanoid/bin/python train.py g1_train  --no_wandb --task g1
+            /opt/conda/envs/humanoid/bin/python train.py g1_train_quad  --no_wandb --task g1
 
         env:
         - name: WANDB_API_KEY
           value: "a14459c6f0305e04b9b7db0721941580070fcdd1"
 
         volumeMounts:
-        - mountPath: /g1_jianhan_0704
+        - mountPath: /g1_jianhan_quad
           name: g1-volume
         resources:
           limits:
             nvidia.com/gpu: "1"
-            memory: "16G"
+            memory: "32G"
             cpu: "4"
           requests:
             nvidia.com/gpu: "1"
