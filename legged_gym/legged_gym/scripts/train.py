@@ -53,6 +53,7 @@ def train(args):
         args.cols = 5
         args.num_envs = 2
     else:
+        args.headless = True
         mode = "online"
     
     if args.no_wandb:
