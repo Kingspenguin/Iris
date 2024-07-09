@@ -47,7 +47,7 @@ def train(args):
     except:
         pass
     if args.debug:
-        args.headless = True
+        args.headless = False
         mode = "disabled"
         args.rows = 10
         args.cols = 5

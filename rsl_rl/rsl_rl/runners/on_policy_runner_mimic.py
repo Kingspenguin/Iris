@@ -223,9 +223,10 @@ class OnPolicyRunnerMimic:
             learn_time = stop - start
             if self.log_dir is not None:
                 self.log(locals())
-            # if it % self.record_video_interval == 0:
-            #     self.env.start_recording()
-            # self.log_video(it)
+            if it % self.record_video_interval == 0:
+                self.env.start_recording()
+            if self.record_video_interval > 0:
+                self.log_video(it)
             if it < 2500:
                 if it % self.save_interval == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))

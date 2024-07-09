@@ -50,8 +50,12 @@ from .h1.h1_mimic_amp import H1MimicAMP
 from .h1.h1_mimic_view_motion import H1MimicViewMotion
 from .h1.h1_mimic_eval import H1MimicEval
 from .h1.h1_mimic_distill import H1MimicDistill
-from .g1.g1_mimic import G1Mimic
-from .g1.g1_config import G1Cfg, G1CfgPPO
+from .g1.g1_37 import G1_37
+from .g1.g1_37_config import G1_37Cfg, G1_37CfgPPO
+from .g1.g1_21 import G1_21
+from .g1.g1_21_config import G1_21Cfg, G1_21CfgPPO
+from .g1.g1_crawl import G1Crawl
+from .g1.g1_crawl_config import G1CrawlCfg, G1CrawlCfgPPO, G1orzCfg
 
 import os
 import ipdb
@@ -72,5 +76,8 @@ task_registry.register( "h1_view", H1MimicViewMotion, H1MimicCfg(), H1MimicCfgPP
 task_registry.register( "h1_mimic_eval", H1MimicEval, H1MimicCfg(), H1MimicCfgPPO() )
 task_registry.register( "h1_mimic_amp", H1MimicAMP, H1MimicAMPCfg(), H1MimicAMPCfgPPO() )
 task_registry.register( "h1_mimic_distill", H1MimicDistill, H1MimicCfg(), H1MimicDistillCfgPPO() )
-task_registry.register( "g1", G1Mimic, G1Cfg(), G1CfgPPO() )
-task_registry.register( "h1", G1Mimic, H1_Cfg(), H1_CfgPPO() )
+task_registry.register( "h1", G1_37, H1_Cfg(), H1_CfgPPO() )
+task_registry.register( "g1_37", G1_37, G1_37Cfg(), G1_37CfgPPO() )
+task_registry.register( "g1_21", G1_21, G1_21Cfg(), G1_21CfgPPO() )
+task_registry.register( "g1_crawl", G1Crawl, G1CrawlCfg(), G1CrawlCfgPPO() )
+task_registry.register( "g1_orz", G1Crawl, G1orzCfg(), G1CrawlCfgPPO() )

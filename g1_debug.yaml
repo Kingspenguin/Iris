@@ -1,10 +1,20 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: jianhan-g1-training-quadru-walk
+  name: jianhan-g1-training-quadru-walk-0709-gitee
 spec:
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A10
+                - NVIDIA-A100
       containers:
       - name: g1-container-quad
         image: rchal97/complex_loco_preview4
@@ -15,14 +25,19 @@ spec:
             cd /workspace
             conda create -y -n humanoid python=3.8 &&
             source activate humanoid &&
-            # cd ~ &&
+            git config --global credential.helper 'cache --timeout=120' &&
+            echo "https://$(cat /var/run/secrets/gitee-token/token)@gitee.com" > ~/.git-credentials &&
+            git config --global credential.helper store &&
+            git clone git@gitee.com:ziyanx02/humanoid.git &&
             pip3 install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html &&
-            git clone https://github.com/Kingspenguin/g1.git &&
-            cd g1 &&
-            git checkout main &&
             cd isaacgym/python &&
             pip install -e . &&
             cd ../.. &&
+            cd humanoid &&
+            git checkout g1_ziyan &&
+            # cd isaacgym/python &&
+            # pip install -e . &&
+            # cd ../.. &&
             cd rsl_rl &&
             pip install -e . &&
             cd .. &&
@@ -34,27 +49,35 @@ spec:
             source activate humanoid &&
             cd legged_gym/legged_gym/scripts &&
             wandb login a14459c6f0305e04b9b7db0721941580070fcdd1 &&
-            /opt/conda/envs/humanoid/bin/python train.py g1_train_quad_37_0709  --no_wandb --task g1
-
+            /opt/conda/envs/humanoid/bin/python train.py g1_train_quadru_0709 --no_wandb --task g1_crawl
         env:
         - name: WANDB_API_KEY
           value: "a14459c6f0305e04b9b7db0721941580070fcdd1"
+        - name: GITEE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: gitee-token
+              key: token
 
         volumeMounts:
-        - mountPath: /g1_jianhan_quadru
+        - mountPath: /g1tmp1
+          name: g1tmp
+        - mountPath: /g1_jianhan_quadru_0709_2
           name: jhma 
         resources:
           limits:
             nvidia.com/gpu: "1"
             memory: "32G"
-            cpu: "4"
+            cpu: "16"
           requests:
             nvidia.com/gpu: "1"
             memory: "32G"
-            cpu: "4"
+            cpu: "16"
       restartPolicy: Never
       volumes:
+      - emptyDir:
+          medium: Memory
+        name: g1tmp1
       - name: jhma 
         persistentVolumeClaim:
           claimName: jhma 
-
