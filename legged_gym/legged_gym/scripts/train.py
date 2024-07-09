@@ -40,14 +40,14 @@ import torch
 import wandb
 
 def train(args):
-    args.headless = True
+    args.headless = False
     log_pth = LEGGED_GYM_ROOT_DIR + "/logs/{}/".format(args.proj_name) + args.exptid
     try:
         os.makedirs(log_pth)
     except:
         pass
     if args.debug:
-        args.headless = True
+        args.headless = False
         mode = "disabled"
         args.rows = 10
         args.cols = 5

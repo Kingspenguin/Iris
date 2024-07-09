@@ -1,10 +1,19 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: jianhan-g1-training-quadru-walk
+  name: jianhan-g1-training-quadru-walk-0709
 spec:
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A10
       containers:
       - name: g1-container-quad
         image: rchal97/complex_loco_preview4
@@ -34,26 +43,31 @@ spec:
             source activate humanoid &&
             cd legged_gym/legged_gym/scripts &&
             wandb login a14459c6f0305e04b9b7db0721941580070fcdd1 &&
-            /opt/conda/envs/humanoid/bin/python train.py g1_train_quad_37_0709  --no_wandb --task g1
+            /opt/conda/envs/humanoid/bin/python train.py g1_train_quadru_0709  --no_wandb --task g1
 
         env:
         - name: WANDB_API_KEY
           value: "a14459c6f0305e04b9b7db0721941580070fcdd1"
 
         volumeMounts:
-        - mountPath: /g1_jianhan_quadru
+        - mountPath: /g1tmp
+          name: g1tmp
+        - mountPath: /g1_jianhan_quadru_0709
           name: jhma 
         resources:
           limits:
             nvidia.com/gpu: "1"
             memory: "32G"
-            cpu: "4"
+            cpu: "16"
           requests:
             nvidia.com/gpu: "1"
             memory: "32G"
-            cpu: "4"
+            cpu: "16"
       restartPolicy: Never
       volumes:
+      - emptyDir:
+          medium: Memory
+        name: g1tmp
       - name: jhma 
         persistentVolumeClaim:
           claimName: jhma 
